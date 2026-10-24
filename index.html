@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Laundry Counter</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2563eb">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Laundry">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--text:#14171c;--muted:#6b7280;--accent:#2563eb;--accent-t:#fff;--line:#e5e7eb;--danger:#dc2626;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1115;--card:#1a1d24;--text:#eef0f3;--muted:#9aa3b0;--accent:#4f8bff;--accent-t:#fff;--line:#2a2f3a;--danger:#f87171;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f1115;--card:#1a1d24;--text:#eef0f3;--muted:#9aa3b0;--accent:#4f8bff;--accent-t:#fff;--line:#2a2f3a;--danger:#f87171;color-scheme:dark}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:480px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:4px 0 14px}
+h2{font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:24px 0 8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:6px 14px}
+.row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.name{font-size:17px}
+.ctl{display:flex;align-items:center;gap:6px}
+.ctl button{width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:24px;line-height:1}
+.ctl button.plus{background:var(--accent);color:var(--accent-t);border-color:var(--accent)}
+.num{min-width:36px;text-align:center;font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+.top{display:flex;gap:10px;align-items:center;margin-bottom:12px}
+input[type=date],input[type=text]{font:inherit;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;min-width:0}
+input[type=date]{flex:1}
+.add{display:flex;gap:8px;margin-top:10px}
+.add input{flex:1}
+.btn{font:inherit;font-weight:600;border:0;border-radius:12px;padding:12px 16px;background:var(--accent);color:var(--accent-t)}
+.btn.ghost{background:var(--card);color:var(--text);border:1px solid var(--line)}
+.save{width:100%;margin-top:14px;padding:16px;font-size:17px}
+.total{display:flex;justify-content:space-between;padding:10px 4px 0;color:var(--muted)}
+.entry{padding:12px 0;border-bottom:1px solid var(--line)}
+.entry:last-child{border-bottom:0}
+.eh{display:flex;justify-content:space-between;align-items:center;font-weight:600}
+.del{background:none;border:0;color:var(--danger);font:inherit;padding:6px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chip{background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:14px}
+.empty{color:var(--muted);padding:14px 0;text-align:center}
+.stats{display:flex;gap:10px}
+.stat{flex:1;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px}
+.stat b{display:block;font-size:22px}
+.stat span{color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<main>
+<h1>🧺 Laundry Counter</h1>
+
+<div class="top">
+  <input type="date" id="date" aria-label="Date">
+  <button class="btn ghost" id="reset">Reset</button>
+</div>
+
+<div class="card" id="counter"></div>
+
+<div class="add">
+  <input type="text" id="newType" placeholder="Add another item (e.g. Towels)">
+  <button class="btn ghost" id="addType">Add</button>
+</div>
+
+<div class="total"><span>Total pieces</span><b id="sum">0</b></div>
+<button class="btn save" id="save">Save this load</button>
+
+<h2>Overview</h2>
+<div class="stats">
+  <div class="stat"><b id="loads">0</b><span>loads saved</span></div>
+  <div class="stat"><b id="pieces">0</b><span>pieces total</span></div>
+</div>
+
+<h2>History</h2>
+<div class="card" id="history"></div>
+</main>
+
+<script>
+(function(){
+var KEY="laundry-counter-v1";
+var DEFAULT_TYPES=["Shorts","Pants","T-shirts","Socks","Underwear"];
+var state={types:DEFAULT_TYPES.slice(),entries:[]};
+var counts={};
+
+function load(){
+  try{var raw=localStorage.getItem(KEY);if(raw){var s=JSON.parse(raw);if(s&&Array.isArray(s.types)&&Array.isArray(s.entries))state=s;}}catch(e){}
+}
+function persist(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}}
+function today(){var d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,10);}
+function fmt(iso){var p=iso.split("-");var d=new Date(+p[0],+p[1]-1,+p[2]);return d.toLocaleDateString(undefined,{weekday:"short",day:"numeric",month:"short",year:"numeric"});}
+function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e;}
+function sumOf(o){var t=0;for(var k in o)t+=o[k];return t;}
+
+function renderCounter(){
+  var box=document.getElementById("counter");box.innerHTML="";
+  state.types.forEach(function(t){
+    var row=el("div","row");
+    row.appendChild(el("span","name",t));
+    var ctl=el("div","ctl");
+    var minus=el("button",null,"−");minus.setAttribute("aria-label","Remove one "+t);
+    var num=el("span","num",String(counts[t]||0));
+    var plus=el("button","plus","+");plus.setAttribute("aria-label","Add one "+t);
+    minus.onclick=function(){counts[t]=Math.max(0,(counts[t]||0)-1);num.textContent=counts[t];updateSum();};
+    plus.onclick=function(){counts[t]=(counts[t]||0)+1;num.textContent=counts[t];updateSum();};
+    ctl.appendChild(minus);ctl.appendChild(num);ctl.appendChild(plus);
+    row.appendChild(ctl);box.appendChild(row);
+  });
+  updateSum();
+}
+function updateSum(){document.getElementById("sum").textContent=sumOf(counts);}
+
+function renderHistory(){
+  var box=document.getElementById("history");box.innerHTML="";
+  var list=state.entries.slice().sort(function(a,b){return a.date<b.date?1:a.date>b.date?-1:b.id-a.id;});
+  var pieces=0;
+  state.entries.forEach(function(e){pieces+=sumOf(e.counts);});
+  document.getElementById("loads").textContent=state.entries.length;
+  document.getElementById("pieces").textContent=pieces;
+  if(!list.length){box.appendChild(el("div","empty","No loads saved yet"));return;}
+  list.forEach(function(e){
+    var wrap=el("div","entry");
+    var head=el("div","eh");
+    head.appendChild(el("span",null,fmt(e.date)+" · "+sumOf(e.counts)));
+    var del=el("button","del","Delete");
+    del.onclick=function(){
+      if(!confirm("Delete this entry?"))return;
+      state.entries=state.entries.filter(function(x){return x.id!==e.id;});
+      persist();renderHistory();
+    };
+    head.appendChild(del);wrap.appendChild(head);
+    var chips=el("div","chips");
+    Object.keys(e.counts).forEach(function(k){if(e.counts[k]>0)chips.appendChild(el("span","chip",k+" "+e.counts[k]));});
+    wrap.appendChild(chips);box.appendChild(wrap);
+  });
+}
+
+document.getElementById("save").onclick=function(){
+  if(sumOf(counts)===0){alert("Add at least one item first.");return;}
+  var c={};for(var k in counts)if(counts[k]>0)c[k]=counts[k];
+  state.entries.push({id:Date.now(),date:document.getElementById("date").value||today(),counts:c});
+  persist();counts={};renderCounter();renderHistory();
+  window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"});
+};
+document.getElementById("reset").onclick=function(){counts={};renderCounter();};
+document.getElementById("addType").onclick=function(){
+  var inp=document.getElementById("newType");var v=inp.value.trim();
+  if(!v)return;
+  var exists=state.types.some(function(t){return t.toLowerCase()===v.toLowerCase();});
+  if(!exists){state.types.push(v);persist();renderCounter();}
+  inp.value="";
+};
+
+if("serviceWorker" in navigator){window.addEventListener("load",function(){try{navigator.serviceWorker.register("sw.js");}catch(e){}});}
+load();
+document.getElementById("date").value=today();
+renderCounter();renderHistory();
+})();
+</script>
+</body>
+</html>
